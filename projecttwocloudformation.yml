@@ -241,22 +241,48 @@ Resources:
     Properties:
       Name: 'TeamAApiGateway'
 
-  # API Gateway Resources and Methods for Lambda Functions
-  ApiGatewayResource:
+  # API Gateway Resource and Method for CountS3ItemsFunction
+  ApiGatewayS3Resource:
     Type: 'AWS::ApiGateway::Resource'
     Properties:
       ParentId: !GetAtt ApiGateway.RootResourceId
-      PathPart: 'invoke'
+      PathPart: 's3'
       RestApiId: !Ref ApiGateway
 
-  ApiGatewayMethod:
+  ApiGatewayS3Method:
     Type: 'AWS::ApiGateway::Method'
     Properties:
       AuthorizationType: 'NONE'
       HttpMethod: 'POST'
-      ResourceId: !Ref ApiGatewayResource
+      ResourceId: !Ref ApiGatewayS3Resource
       RestApiId: !Ref ApiGateway
       Integration:
         Type: 'AWS_PROXY'
         IntegrationHttpMethod: 'POST'
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CountS3ItemsFunction.Arn}/invocations
+
+  # API Gateway Resource and Method for CallDynamoDBOperationsFunction
+  ApiGatewayDynamoDBResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: 'dynamodb'
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayDynamoDBMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      AuthorizationType: 'NONE'
+      HttpMethod: 'POST'
+      ResourceId: !Ref ApiGatewayDynamoDBResource
+      RestApiId: !Ref ApiGateway
+      Integration:
+        Type: 'AWS_PROXY'
+        IntegrationHttpMethod: 'POST'
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CallDynamoDBOperationsFunction.Arn}/invocations
+
+  # API Gateway Resource and Method for StartGlueJobFunction
+  ApiGatewayGlueResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !Get

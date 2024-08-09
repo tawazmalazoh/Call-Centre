@@ -285,4 +285,18 @@ Resources:
   ApiGatewayGlueResource:
     Type: 'AWS::ApiGateway::Resource'
     Properties:
-      ParentId: !Get
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: 'glue'
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayGlueMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      AuthorizationType: 'NONE'
+      HttpMethod: 'POST'
+      ResourceId: !Ref ApiGatewayGlueResource
+      RestApiId: !Ref ApiGateway
+      Integration:
+        Type: 'AWS_PROXY'
+        IntegrationHttpMethod: 'POST'
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${StartGlueJobFunction.Arn}/invocations

@@ -1,0 +1,262 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS architecture with S3, DynamoDB, Lambda functions, and API Gateway
+
+Resources:
+  # S3 Bucket
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: 'teamas3bucket'
+
+  # DynamoDB Table
+  DynamoDBTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: 'teamadynamo'
+      AttributeDefinitions:
+        - AttributeName: 'PrimaryKey'
+          AttributeType: 'S'
+      KeySchema:
+        - AttributeName: 'PrimaryKey'
+          KeyType: 'HASH'
+      BillingMode: PAY_PER_REQUEST
+
+  # IAM Role for Lambda
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: 'LambdaExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'LambdaPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:*'
+                Resource: 
+                  - 'arn:aws:s3:::teamas3bucket'
+                  - 'arn:aws:s3:::teamas3bucket/*'
+              - Effect: 'Allow'
+                Action:
+                  - 'dynamodb:*'
+                Resource: 
+                  - !GetAtt DynamoDBTable.Arn
+              - Effect: 'Allow'
+                Action:
+                  - 'glue:*'
+                Resource: '*'
+
+  # Lambda Function - counts3items
+  CountS3ItemsFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'counts3items'
+      Handler: 'index.lambda_handler'
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+
+          def lambda_handler(event, context):
+              # Initialize S3 client
+              s3_client = boto3.client('s3')
+              bucket_name = "teamas3bucket"
+              
+              # Initialize counter
+              item_count = 0
+              
+              try:
+                  # List objects in the bucket and count them
+                  response = s3_client.list_objects_v2(Bucket=bucket_name)
+                  
+                  if 'Contents' in response:
+                      item_count += len(response['Contents'])
+                  
+                  # Handle pagination if there are more than 1000 objects
+                  while response.get('IsTruncated'):
+                      response = s3_client.list_objects_v2(
+                          Bucket=bucket_name,
+                          ContinuationToken=response['NextContinuationToken']
+                      )
+                      
+                      if 'Contents' in response:
+                          item_count += len(response['Contents'])
+                  
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps({
+                          'bucket_name': bucket_name,
+                          'item_count': item_count
+                      })
+                  }
+              except Exception as e:
+                  # Return an error response in case of failure
+                  return {
+                      'statusCode': 500,
+                      'body': json.dumps({
+                          'message': 'Error counting items in the bucket',
+                          'error': str(e)
+                      })
+                  }
+
+      Runtime: 'python3.8'
+      Timeout: 60
+
+  # Lambda Function - calldynamodboperations
+  CallDynamoDBOperationsFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'calldynamodboperations'
+      Handler: 'index.lambda_handler'
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import logging
+
+          # Set up logging
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          # Define the DynamoDB table that Lambda will connect to
+          table_name = "lambdaDB-teamA"
+
+          # Create the DynamoDB resource
+          dynamo = boto3.resource('dynamodb', region_name='us-east-2').Table(table_name)
+
+          # Define some functions to perform the CRUD operations
+          def create(payload):
+              logger.info(f"Creating item with payload: {payload}")
+              return dynamo.put_item(Item=payload['Item'])
+
+          def read(payload):
+              logger.info(f"Reading item with key: {payload['Key']}")
+              return dynamo.get_item(Key=payload['Key'])
+
+          def update(payload):
+              logger.info(f"Updating item with payload: {payload}")
+              return dynamo.update_item(**{k: payload[k] for k in ['Key', 'UpdateExpression', 
+              'ExpressionAttributeNames', 'ExpressionAttributeValues'] if k in payload})
+
+          def delete(payload):
+              logger.info(f"Deleting item with key: {payload['Key']}")
+              return dynamo.delete_item(Key=payload['Key'])
+
+          def echo(payload):
+              logger.info(f"Echoing payload: {payload}")
+              return payload
+
+          operations = {
+              'create': create,
+              'read': read,
+              'update': update,
+              'delete': delete,
+              'echo': echo,
+          }
+
+          def lambda_handler(event, context):
+              '''Provide an event that contains the following keys:
+                - operation: one of the operations in the operations dict below
+                - payload: a JSON object containing parameters to pass to the 
+                  operation being performed
+              '''
+              
+              operation = event['operation']
+              payload = event['payload']
+              
+              logger.info(f"Received event: {event}")
+              
+              if operation in operations:
+                  try:
+                      result = operations[operation](payload)
+                      logger.info(f"Operation {operation} successful with result: {result}")
+                      return result
+                  except Exception as e:
+                      logger.error(f"Operation {operation} failed with error: {str(e)}")
+                      raise
+              else:
+                  raise ValueError(f'Unrecognized operation "{operation}"')
+
+      Runtime: 'python3.8'
+      Timeout: 60
+
+  # Lambda Function - startgluejob
+  StartGlueJobFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'startgluejob'
+      Handler: 'index.lambda_handler'
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+
+          # Initialize the Boto3 Glue client
+          glue_client = boto3.client('glue')
+
+          def lambda_handler(event, context):
+              # Log the incoming event for debugging
+              print(event)
+              job_name='teamA-glue-job'
+              
+              try:
+                  # Start the Glue job
+                  response = glue_client.start_job_run(JobName=job_name)
+                  job_run_id = response['JobRunId']
+                  
+                  # Return a success response with the JobRunId in the body
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps({
+                          'message': 'Glue job started successfully!',
+                          'jobRunId': job_run_id
+                      })
+                  }
+              except Exception as e:
+                  # Return an error response in case of failure
+                  return {
+                      'statusCode': 500,
+                      'body': json.dumps({
+                          'message': 'Error starting Glue job',
+                          'error': str(e)
+                      })
+                  }
+
+      Runtime: 'python3.8'
+      Timeout: 60
+
+  # API Gateway
+  ApiGateway:
+    Type: 'AWS::ApiGateway::RestApi'
+    Properties:
+      Name: 'TeamAApiGateway'
+
+  # API Gateway Resources and Methods for Lambda Functions
+  ApiGatewayResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: 'invoke'
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      AuthorizationType: 'NONE'
+      HttpMethod: 'POST'
+      ResourceId: !Ref ApiGatewayResource
+      RestApiId: !Ref ApiGateway
+      Integration:
+        Type: 'AWS_PROXY'
+        IntegrationHttpMethod: 'POST'
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CountS3ItemsFunction.Arn}/invocations

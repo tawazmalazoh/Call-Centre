@@ -300,3 +300,32 @@ Resources:
         Type: 'AWS_PROXY'
         IntegrationHttpMethod: 'POST'
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${StartGlueJobFunction.Arn}/invocations
+
+  # Lambda Permission for API Gateway to invoke CountS3ItemsFunction
+  CountS3ItemsPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref CountS3ItemsFunction
+      Principal: 'apigateway.amazonaws.com'
+
+  # Lambda Permission for API Gateway to invoke CallDynamoDBOperationsFunction
+  CallDynamoDBOperationsPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref CallDynamoDBOperationsFunction
+      Principal: 'apigateway.amazonaws.com'
+
+  # Lambda Permission for API Gateway to invoke StartGlueJobFunction
+  StartGlueJobPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref StartGlueJobFunction
+      Principal: 'apigateway.amazonaws.com'
+
+Outputs:
+  ApiGatewayUrl:
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/"
+    Description: "Base URL for the API Gateway"

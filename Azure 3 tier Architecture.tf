@@ -461,3 +461,22 @@ resource "azurerm_mssql_server" "secondary" {
     type = "SystemAssigned"
   }
 }
+
+
+# Output the public IP address of the Bastion Host
+output "bastion_public_ip" {
+  description = "The public IP address of the Bastion Host"
+  value       = azurerm_public_ip.bastion_pip.ip_address
+}
+
+# Output the DNS name of the Bastion Host
+output "bastion_dns_name" {
+  description = "The DNS name of the Bastion Host"
+  value       = azurerm_bastion_host.bastion.dns_name
+}
+
+# Output the ID of the Web Server VM Scale Set
+output "web_vmss_id" {
+  description = "The ID of the Web Server VM Scale Set"
+  value       = azurerm_linux_virtual_machine_scale_set.web_servers.id
+}

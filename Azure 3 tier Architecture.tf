@@ -116,8 +116,12 @@ Bastion Host is a special-purpose server designed to provide secure access to vi
 especially in scenarios where direct exposure of these VMs to the internet is not desirable.
 */
 
-resource "azurerm_public_ip" "bastion_pip" {
-  name                = "bastion-pip"
+
+
+
+# Public IP for Bastion Host
+resource "azurerm_public_ip" "bastion" {
+  name                = "bastion-ip"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
@@ -126,15 +130,18 @@ resource "azurerm_public_ip" "bastion_pip" {
 
 
 
+
+# Azure Bastion Host
 resource "azurerm_bastion_host" "bastion" {
   name                = "bastion-host"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  dns_name            = "bastion-host"
+  dns_name            = "bastion-${azurerm_resource_group.rg.name}.eastus.azure.com"
+
   ip_configuration {
-    name                 = "bastion-config"
+    name                 = "bastion-ip"
     subnet_id            = azurerm_subnet.dmz.id
-    public_ip_address_id = azurerm_public_ip.bastion_pip.id
+    public_ip_address_id = azurerm_public_ip.bastion.id
   }
 }
 
@@ -292,30 +299,6 @@ resource "azurerm_sql_server" "sql_secondary" {
   administrator_login_password = "P@ssw0rd1234!"
 }
 
-
-
-# Azure Bastion Host
-resource "azurerm_bastion_host" "bastion" {
-  name                = "bastion-host"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  dns_name            = "bastion-${azurerm_resource_group.rg.name}.eastus.azure.com"
-
-  ip_configuration {
-    name                 = "bastion-ip"
-    subnet_id            = azurerm_subnet.dmz.id
-    public_ip_address_id = azurerm_public_ip.bastion.id
-  }
-}
-
-# Public IP for Bastion Host
-resource "azurerm_public_ip" "bastion" {
-  name                = "bastion-ip"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
-}
 
 
 

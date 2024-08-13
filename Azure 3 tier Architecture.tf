@@ -246,7 +246,7 @@ resource "azurerm_lb_backend_address_pool" "backend_pool" {
 }
 
 
-
+ 
 
 # Business Tier Servers (Azure Scale Sets with VMs)
 resource "azurerm_linux_virtual_machine_scale_set" "business_servers" {
